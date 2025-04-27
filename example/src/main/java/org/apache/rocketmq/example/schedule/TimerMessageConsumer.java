@@ -21,6 +21,10 @@ import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyStatus;
 import org.apache.rocketmq.client.consumer.listener.MessageListenerConcurrently;
 import org.apache.rocketmq.common.message.MessageExt;
 
+/**
+ * This example shows how to subscribe and consume scheduled messages in push mode.
+ * @See DefaultMQPushConsumer
+ */
 public class TimerMessageConsumer {
 
     //Note: TimerMessage is a new feature in version 5.0, so be sure to upgrade RocketMQ to version 5.0+ before using it.

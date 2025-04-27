@@ -25,6 +25,11 @@ import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.message.MessageExt;
 
+
+/**
+ * This example shows how to subscribe and consume scheduled messages in push mode.
+ * @See DefaultMQPushConsumer
+ */
 public class PushConsumer {
     public static final String TOPIC = "TopicTest";
     public static final String CONSUMER_GROUP = "CID_JODIE_1";
