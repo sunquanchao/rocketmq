@@ -35,7 +35,7 @@ public class PushConsumer {
     public static final String CONSUMER_GROUP = "CID_JODIE_1";
     public static final String NAMESRV_ADDR = "127.0.0.1:9876";
     public static void main(String[] args) throws InterruptedException, MQClientException {
-
+        //GOME-ads-propellor
         DefaultMQPushConsumer consumer = new DefaultMQPushConsumer(CONSUMER_GROUP);
 
         // Uncomment the following line while debugging, namesrvAddr should be set to your local address
