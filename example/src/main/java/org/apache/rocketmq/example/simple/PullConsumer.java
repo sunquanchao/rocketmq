@@ -37,6 +37,7 @@ public class PullConsumer {
 
     public static void main(String[] args) throws MQClientException {
 
+        //GOME-ads-propellor
         DefaultMQPullConsumer consumer = new DefaultMQPullConsumer("please_rename_unique_group_name_5");
         consumer.setNamesrvAddr("127.0.0.1:9876");
         Set<String> topics = new HashSet<>();

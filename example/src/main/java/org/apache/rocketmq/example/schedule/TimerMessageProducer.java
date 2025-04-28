@@ -21,6 +21,10 @@ import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.common.message.Message;
 
+/**
+ * This class demonstrates how to send a TIMER message to nameserver using provided API.
+ * RocketMQ5.0中有两种延迟消息机制：一种是新引入的TimerMessage，支持任意时间的延迟，使用时间轮算法。
+ */
 public class TimerMessageProducer {
 
     //Note: TimerMessage is a new feature in version 5.0, so be sure to upgrade RocketMQ to version 5.0+ before using it.

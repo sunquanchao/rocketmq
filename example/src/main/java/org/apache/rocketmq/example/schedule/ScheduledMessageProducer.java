@@ -21,6 +21,10 @@ import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.common.message.Message;
 
+/**
+ * This class demonstrates how to send a scheduled message to nameserver using provided API.
+ * RocketMQ5.0中有两种延迟消息机制：一种是传统的ScheduledMessage
+ */
 public class ScheduledMessageProducer {
 
     public static final String PRODUCER_GROUP = "ExampleProducerGroup";

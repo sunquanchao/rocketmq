@@ -31,6 +31,7 @@ public class Producer {
 
     public static void main(String[] args) throws MQClientException, InterruptedException {
 
+        //GOME-ads-flightApi
         DefaultMQProducer producer = new DefaultMQProducer(PRODUCER_GROUP);
 
         // Uncomment the following line while debugging, namesrvAddr should be set to your local address
