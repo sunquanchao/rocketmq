@@ -50,20 +50,47 @@ import org.apache.rocketmq.remoting.protocol.heartbeat.MessageModel;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/*
+https://blog.csdn.net/qq_43270074/article/details/140959709
+ * ConsumeMessageOrderlyService is responsible for consuming messages in a orderly manner.
+顺序消费技术原理
+RocketMQ 支持 2 种消费模式，集群消费和广播消费。
+集群消费模式下每一条消息只会被 ConsumerGroup 分组下的一个 Consumer 消费，而广播消费模式下，每个 Consumer 都会消费这条消息。
+多数场景下用的都是集群消费，也就是一次消费代表一次业务处理，每一条消息都将由集群中的一个实例来对应处理。
+而顺序消费也叫有序消费，如果消息是顺序发送，且顺序存储，那理应消费也是一条条消费，这个用屁股想也知道，但实际却没这么简单。
+在 Consumer 中不止一个线程在那消费，因为同一个消费者可能会处理不同的队列消息。如果只有一个线程。那不得慢死，实际上会有多个线程同时消费，对应的是 Consumer 中的消费线程池。
+多个线程消费同一条消息，如何防止消息被重复消费又是一大问题。
+如果是你，会怎么做呢？
+没错，就是加锁，在 RocketMQ 中用了 3 把锁来保证，分别是分布式锁、Synchronized、ReentrantLock。
+————————————————
+ *
+ */
 public class ConsumeMessageOrderlyService implements ConsumeMessageService {
+    // Logger for logging messages
     private static final Logger log = LoggerFactory.getLogger(ConsumeMessageOrderlyService.class);
+    // Maximum time to consume continuously
     private final static long MAX_TIME_CONSUME_CONTINUOUSLY =
         Long.parseLong(System.getProperty("rocketmq.client.maxTimeConsumeContinuously", "60000"));
+    // DefaultMQPushConsumerImpl instance
     private final DefaultMQPushConsumerImpl defaultMQPushConsumerImpl;
+    // DefaultMQPushConsumer instance
     private final DefaultMQPushConsumer defaultMQPushConsumer;
+    // MessageListenerOrderly instance
     private final MessageListenerOrderly messageListener;
+    // BlockingQueue for consume requests
     private final BlockingQueue<Runnable> consumeRequestQueue;
+    // ThreadPoolExecutor for consuming messages
     private final ThreadPoolExecutor consumeExecutor;
+    // Consumer group
     private final String consumerGroup;
+    // MessageQueueLock instance
     private final MessageQueueLock messageQueueLock = new MessageQueueLock();
+    // ScheduledExecutorService for scheduling tasks
     private final ScheduledExecutorService scheduledExecutorService;
+    // Flag to indicate if the service is stopped
     private volatile boolean stopped = false;
 
+    // Constructor for ConsumeMessageOrderlyService
     public ConsumeMessageOrderlyService(DefaultMQPushConsumerImpl defaultMQPushConsumerImpl,
         MessageListenerOrderly messageListener) {
         this.defaultMQPushConsumerImpl = defaultMQPushConsumerImpl;
@@ -85,6 +112,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
         this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("ConsumeMessageScheduledThread_" + consumerGroupTag));
     }
 
+    // Start the service
     @Override
     public void start() {
         if (MessageModel.CLUSTERING.equals(ConsumeMessageOrderlyService.this.defaultMQPushConsumerImpl.messageModel())) {
@@ -100,6 +128,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
             }, 1000, ProcessQueue.REBALANCE_LOCK_INTERVAL, TimeUnit.MILLISECONDS);
         }
     }
+    // Shutdown the service
 
     @Override
     public void shutdown(long awaitTerminateMillis) {
@@ -110,10 +139,12 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
             this.unlockAllMQ();
         }
     }
+    // Unlock all message queues
 
     public synchronized void unlockAllMQ() {
         this.defaultMQPushConsumerImpl.getRebalanceImpl().unlockAll(false);
     }
+    // Update the core pool size of the consume executor
 
     @Override
     public void updateCorePoolSize(int corePoolSize) {
@@ -123,19 +154,23 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
             this.consumeExecutor.setCorePoolSize(corePoolSize);
         }
     }
+    // Increase the core pool size of the consume executor
 
     @Override
     public void incCorePoolSize() {
     }
+    // Decrease the core pool size of the consume executor
 
     @Override
     public void decCorePoolSize() {
     }
+    // Get the core pool size of the consume executor
 
     @Override
     public int getCorePoolSize() {
         return this.consumeExecutor.getCorePoolSize();
     }
+    // Consume a message directly
 
     @Override
     public ConsumeMessageDirectlyResult consumeMessageDirectly(MessageExt msg, String brokerName) {
@@ -190,6 +225,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
                 mq, e);
         }
 
+    // Submit a consume request
         result.setAutoCommit(context.isAutoCommit());
         result.setSpentTimeMills(System.currentTimeMillis() - beginTime);
 
@@ -202,6 +238,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
     public void submitConsumeRequest(
         final List<MessageExt> msgs,
         final ProcessQueue processQueue,
+    // Submit a pop consume request
         final MessageQueue messageQueue,
         final boolean dispatchToConsume) {
         if (dispatchToConsume) {
@@ -209,12 +246,14 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
             this.consumeExecutor.submit(consumeRequest);
         }
     }
+    // Lock message queues periodically
 
     @Override
     public void submitPopConsumeRequest(final List<MessageExt> msgs,
                                         final PopProcessQueue processQueue,
                                         final MessageQueue messageQueue) {
         throw new UnsupportedOperationException();
+    // Try to lock a message queue later and reconsume
     }
 
     public synchronized void lockMQPeriodically() {
@@ -229,6 +268,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
             @Override
             public void run() {
                 boolean lockOK = ConsumeMessageOrderlyService.this.lockOneMQ(mq);
+    // Lock a message queue
                 if (lockOK) {
                     ConsumeMessageOrderlyService.this.submitConsumeRequestLater(processQueue, mq, 10);
                 } else {
@@ -237,6 +277,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
             }
         }, delayMills, TimeUnit.MILLISECONDS);
     }
+    // Submit a consume request later
 
     public synchronized boolean lockOneMQ(final MessageQueue mq) {
         if (!this.stopped) {
@@ -262,6 +303,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
             timeMillis = 30000;
         }
 
+    // Process the consume result
         this.scheduledExecutorService.schedule(new Runnable() {
 
             @Override
@@ -335,10 +377,12 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
                 default:
                     break;
             }
+    // Get the consumer stats manager
         }
 
         if (commitOffset >= 0 && !consumeRequest.getProcessQueue().isDropped()) {
             this.defaultMQPushConsumerImpl.getOffsetStore().updateOffset(consumeRequest.getMessageQueue(), commitOffset, false);
+    // Get the maximum reconsume times
         }
 
         return continueConsume;
@@ -348,6 +392,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
         return this.defaultMQPushConsumerImpl.getConsumerStatsManager();
     }
 
+    // Check the reconsume times
     private int getMaxReconsumeTimes() {
         // default reconsume times: Integer.MAX_VALUE
         if (this.defaultMQPushConsumer.getMaxReconsumeTimes() == -1) {
@@ -367,6 +412,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
                         suspend = true;
                         msg.setReconsumeTimes(msg.getReconsumeTimes() + 1);
                     }
+    // Send a message back
                 } else {
                     suspend = true;
                     msg.setReconsumeTimes(msg.getReconsumeTimes() + 1);
@@ -390,6 +436,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
             MessageAccessor.clearProperty(newMsg, MessageConst.PROPERTY_TRANSACTION_PREPARED);
             newMsg.setDelayTimeLevel(3 + msg.getReconsumeTimes());
 
+    // Reset the namespace
             this.defaultMQPushConsumerImpl.getmQClientFactory().getDefaultMQProducer().send(newMsg);
             return true;
         } catch (Exception e) {
@@ -398,23 +445,30 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
 
         return false;
     }
+    // Inner class for ConsumeRequest
 
+        // ProcessQueue instance
     public void resetNamespace(final List<MessageExt> msgs) {
+        // MessageQueue instance
         for (MessageExt msg : msgs) {
             if (StringUtils.isNotEmpty(this.defaultMQPushConsumer.getNamespace())) {
+        // Constructor for ConsumeRequest
                 msg.setTopic(NamespaceUtil.withoutNamespace(msg.getTopic(), this.defaultMQPushConsumer.getNamespace()));
             }
         }
     }
 
+        // Get the process queue
     class ConsumeRequest implements Runnable {
         private final ProcessQueue processQueue;
         private final MessageQueue messageQueue;
 
+        // Get the message queue
         public ConsumeRequest(ProcessQueue processQueue, MessageQueue messageQueue) {
             this.processQueue = processQueue;
             this.messageQueue = messageQueue;
         }
+        // Run the consume request
 
         public ProcessQueue getProcessQueue() {
             return processQueue;
